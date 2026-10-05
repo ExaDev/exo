@@ -7,6 +7,9 @@ from typing import Callable, Generator, cast, get_args
 
 import mlx.core as mx
 from mlx_lm.generate import (
+    generation_stream as mlx_lm_generation_stream,
+)
+from mlx_lm.generate import (
     maybe_quantize_kv_cache,
     stream_generate,
 )
@@ -326,6 +329,9 @@ def prefill(
 
     set_pipeline_prefill(model, is_prefill=True)
 
+    # The batch's next decode step may still be running: let it finish before this prefill's
+    # collectives, as for the batch's own prompts (see opt_batch_gen._prompt_after_decode_step)
+    mx.synchronize(mlx_lm_generation_stream)
     mx_barrier(group)
     logger.info("Starting prefill")
 
