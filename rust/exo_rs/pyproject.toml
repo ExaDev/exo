@@ -15,7 +15,7 @@ requires-python = ">=3.13"
 dependencies = []
 
 [dependency-groups]
-dev = ["exo_rs", "pytest>=8.4.0", "pytest-asyncio>=1.0.0"]
+dev = ["exo_rs", "pytest>=9.1.1", "pytest-asyncio>=1.0.0"]
 
 [tool.maturin]
 module-name = "exo_rs"
