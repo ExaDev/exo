@@ -20,6 +20,9 @@ class ClaudeToolDefinition(BaseModel, frozen=True):
 
 # Type aliases
 ClaudeRole = Literal["user", "assistant"]
+# Roles accepted in a request's `messages`. The Messages API defines only user and assistant there, but Claude Code
+# puts a system message inside `messages` (a token-budget note) when it talks to a server that is not Anthropic's.
+ClaudeRequestRole = Literal["user", "assistant", "system", "developer"]
 ClaudeStopReason = Literal["end_turn", "max_tokens", "stop_sequence", "tool_use"]
 
 
@@ -92,7 +95,7 @@ ClaudeInputContentBlock = (
 class ClaudeMessage(BaseModel, frozen=True):
     """Message in Claude Messages API request."""
 
-    role: ClaudeRole
+    role: ClaudeRequestRole
     content: str | list[ClaudeInputContentBlock]
 
 

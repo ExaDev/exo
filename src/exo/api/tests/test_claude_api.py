@@ -151,6 +151,61 @@ class TestClaudeRequestToInternal:
         assert params.stream is True
 
 
+class TestSystemMessagesInsideMessages:
+    """Claude Code puts a system message inside `messages`; strict chat templates raise on one that is not first."""
+
+    async def test_later_system_message_becomes_a_user_message_in_place(self):
+        request = ClaudeMessagesRequest(
+            model=ModelId("claude-3-opus"),
+            max_tokens=100,
+            messages=[
+                ClaudeMessage(role="user", content="Hello"),
+                ClaudeMessage(role="system", content="token budget note"),
+                ClaudeMessage(role="user", content="Again"),
+            ],
+        )
+        params = await claude_request_to_text_generation(request)
+
+        assert [m.role for m in params.input] == ["user", "user", "user"]
+        assert [m.content for m in params.input] == [
+            "Hello",
+            "token budget note",
+            "Again",
+        ]
+        assert params.chat_template_messages is not None
+        assert [m["role"] for m in params.chat_template_messages] == [
+            "user",
+            "user",
+            "user",
+        ]
+
+    async def test_developer_message_is_treated_like_a_system_message(self):
+        request = ClaudeMessagesRequest(
+            model=ModelId("claude-3-opus"),
+            max_tokens=100,
+            messages=[
+                ClaudeMessage(role="user", content="Hello"),
+                ClaudeMessage(role="developer", content="note"),
+            ],
+        )
+        params = await claude_request_to_text_generation(request)
+
+        assert [m.role for m in params.input] == ["user", "user"]
+
+    async def test_leading_system_message_keeps_its_role(self):
+        request = ClaudeMessagesRequest(
+            model=ModelId("claude-3-opus"),
+            max_tokens=100,
+            messages=[
+                ClaudeMessage(role="system", content="You are terse."),
+                ClaudeMessage(role="user", content="Hello"),
+            ],
+        )
+        params = await claude_request_to_text_generation(request)
+
+        assert [m.role for m in params.input] == ["system", "user"]
+
+
 class TestClaudeMessagesRequestValidation:
     """Tests for Claude Messages API request validation."""
 

@@ -3,7 +3,7 @@
 import json
 import re
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, Literal
 
 from exo.api.adapters.chat_completions import fetch_image_url
 from exo.api.types import FinishReason, Usage
@@ -22,6 +22,7 @@ from exo.api.types.claude_api import (
     ClaudeMessageStart,
     ClaudeMessageStartEvent,
     ClaudeMessageStopEvent,
+    ClaudeRequestRole,
     ClaudeStopReason,
     ClaudeTextBlock,
     ClaudeTextDelta,
@@ -91,6 +92,21 @@ def _strip_volatile_headers(text: str) -> str:
     return _VOLATILE_HEADER_RE.sub("", text)
 
 
+def _template_role(
+    index: int, role: ClaudeRequestRole
+) -> Literal["system", "user", "assistant"]:
+    """The role a request message takes in the chat template.
+
+    The Messages API allows only user and assistant inside `messages`, but Claude Code puts a system message there (a
+    token-budget note). A leading one keeps its role, which every chat template accepts. A later one becomes a user
+    message at the same position: strict templates (Qwen3.5) raise on a system message that is not first, and moving it
+    to the front would change the start of the prompt on every turn and defeat the prefix cache.
+    """
+    if role in ("user", "assistant"):
+        return role
+    return "system" if index == 0 else "user"
+
+
 async def handle_image_block(block: ClaudeImageBlock) -> Base64Image | None:
     if block.source.type == "base64" and block.source.data:
         return Base64Image(block.source.data)
@@ -126,13 +142,14 @@ async def claude_request_to_text_generation(
 
     # Convert messages to input
     input_messages: list[InputMessage] = []
-    for msg in request.messages:
+    for index, msg in enumerate(request.messages):
+        role = _template_role(index, msg.role)
         if isinstance(msg.content, str):
             input_messages.append(
-                InputMessage(role=msg.role, content=InputMessageContent(msg.content))
+                InputMessage(role=role, content=InputMessageContent(msg.content))
             )
             chat_template_messages.append(
-                {"role": msg.role, "content": InputMessageContent(msg.content)}
+                {"role": role, "content": InputMessageContent(msg.content)}
             )
             continue
 
@@ -178,9 +195,9 @@ async def claude_request_to_text_generation(
         reasoning_content = "".join(thinking_parts) if thinking_parts else None
 
         # Build InputMessage from text content
-        if msg.role in ("user", "assistant"):
+        if role in ("user", "assistant"):
             input_messages.append(
-                InputMessage(role=msg.role, content=InputMessageContent(content))
+                InputMessage(role=role, content=InputMessageContent(content))
             )
 
         # Build chat_template_messages preserving tool structure
@@ -209,12 +226,12 @@ async def claude_request_to_text_generation(
                     multimodal_content.append({"type": "text", "text": block.text})
                 elif isinstance(block, ClaudeImageBlock):
                     multimodal_content.append({"type": "image"})
-            chat_msg = {"role": msg.role, "content": multimodal_content}
+            chat_msg = {"role": role, "content": multimodal_content}
             if reasoning_content:
                 chat_msg["reasoning_content"] = reasoning_content
             chat_template_messages.append(chat_msg)
         else:
-            chat_msg = {"role": msg.role, "content": content}
+            chat_msg = {"role": role, "content": content}
             if reasoning_content:
                 chat_msg["reasoning_content"] = reasoning_content
             chat_template_messages.append(chat_msg)
